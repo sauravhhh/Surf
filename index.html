@@ -137,6 +137,17 @@
   #err{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;right:14px;z-index:60;
     background:var(--card);border:1px solid var(--sep);border-radius:12px;padding:12px 14px;font-size:14px;display:none;
     box-shadow:0 4px 16px rgba(0,0,0,.2);}
+  /* battery saver: kill blur, shadows, motion (big GPU savings on mobile) */
+  body.saver *{transition:none !important;animation:none !important;}
+  body.saver #tabbar, body.saver #readerBar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}
+  body.saver .card, body.saver .tile, body.saver .fav .fi, body.saver #err{box-shadow:none !important;}
+  body.saver .card, body.saver .tile{border-color:var(--sep);}
+  /* toggle switch */
+  .switch{width:46px;height:27px;border-radius:14px;background:var(--inp);position:relative;flex-shrink:0;cursor:pointer;}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:23px;height:23px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .switch.on{background:var(--acc);}
+  .switch.on::after{left:21px;}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -195,6 +206,10 @@
   <div id="scrim"></div>
   <div id="bmSheet">
     <div class="bh"><span>Bookmarks</span><button class="tbtn" id="bmClose" style="font-size:16px;">Done</button></div>
+    <div class="sechead" style="margin:2px 16px 2px;">Settings</div>
+    <div class="bmrow" id="saverRow"><span>🔋</span><div class="bt"><b>Battery Saver</b><small>Less animation &amp; blur, easier on battery</small></div><span class="switch" id="saverSw"></span></div>
+    <div class="bmrow" id="textRow"><span>📝</span><div class="bt"><b>Text-only Reader</b><small>No images in reader view — saves data</small></div><span class="switch" id="textSw"></span></div>
+    <div class="sechead" style="margin:14px 16px 2px;">Saved</div>
     <div id="bmList"></div>
   </div>
 
@@ -222,6 +237,16 @@ try{
   if(s){ history=s.history||[]; bookmarks=s.bookmarks||[]; if(s.favorites) favorites=s.favorites; }
 }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify({history:history.slice(0,100), bookmarks, favorites})); }catch(e){} }
+/* prefs: battery saver + text-only reader */
+let prefs = {saver:false, textOnly:false};
+try{ const p = JSON.parse(localStorage.getItem('surf-prefs')); if(p) prefs = Object.assign(prefs, p); }catch(e){}
+function applyPrefs(){
+  document.body.classList.toggle('saver', !!prefs.saver);
+  $('saverSw').classList.toggle('on', !!prefs.saver);
+  $('textSw').classList.toggle('on', !!prefs.textOnly);
+  try{ localStorage.setItem('surf-prefs', JSON.stringify(prefs)); }catch(e){}
+}
+window.__surfSaver = v => { prefs.saver = !!v; applyPrefs(); };
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function showErr(m){ const e=$('err'); e.textContent=m; e.style.display='block';
   clearTimeout(showErr.t); showErr.t=setTimeout(()=>e.style.display='none',3500); }
@@ -385,8 +410,9 @@ function extractReadable(doc, base){
     });
     root = best || doc.body;
   }
-  // absolutize images
-  root.querySelectorAll('img').forEach(img=>{
+  // absolutize images (skipped in text-only mode)
+  if(prefs.textOnly) root.querySelectorAll('img,picture,figure').forEach(e=>e.remove());
+  else root.querySelectorAll('img').forEach(img=>{
     const s = img.getAttribute('src'); if(!s) return img.remove();
     try{ img.src = new URL(s, base).href; }catch(e){ img.remove(); }
     img.removeAttribute('srcset');
@@ -565,6 +591,9 @@ function renderTabsView(){
 }
 
 /* ---------- boot ---------- */
+$('saverRow').addEventListener('click', ()=>{ prefs.saver=!prefs.saver; applyPrefs(); });
+$('textRow').addEventListener('click', ()=>{ prefs.textOnly=!prefs.textOnly; applyPrefs(); });
+applyPrefs();
 newTab();
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
