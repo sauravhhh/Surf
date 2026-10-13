@@ -115,6 +115,53 @@
   .tcard .tx{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;border:none;
     width:24px;height:24px;border-radius:12px;font-size:13px;cursor:pointer;}
   #tabsView .tvfoot{padding:14px 16px calc(18px + env(safe-area-inset-bottom));display:flex;justify-content:center;}
+/* ---------- popular sites on homepage ---------- */
+const POPULAR = [
+  {url:'https://m.facebook.com', title:'Facebook', d:'facebook.com'},
+  {url:'https://x.com', title:'X', d:'x.com'},
+  {url:'https://www.instagram.com', title:'Instagram', d:'instagram.com'},
+  {url:'https://m.youtube.com', title:'YouTube', d:'youtube.com'},
+  {url:'https://en.m.wikipedia.org', title:'Wikipedia', d:'wikipedia.org'},
+  {url:'https://www.reddit.com', title:'Reddit', d:'reddit.com'},
+  {url:'https://duckduckgo.com', title:'DuckDuckGo', d:'duckduckgo.com'},
+  {url:'https://github.com', title:'GitHub', d:'github.com'},
+];
+function renderPopular(){
+  $('popGrid').innerHTML = POPULAR.map((p,i)=>
+    '<div class="pop" data-i="'+i+'"><img loading="lazy" src="https://www.google.com/s2/favicons?domain='+p.d+'&sz=128" alt=""><small>'+p.title+'</small></div>'
+  ).join('');
+  $('popGrid').querySelectorAll('.pop').forEach(el=>{
+    el.addEventListener('click', ()=>navigate(cur(), POPULAR[+el.dataset.i].url));
+  });
+}
+/* ---------- iPhone-style menu ---------- */
+function openMenu(){ $('menuWrap').classList.add('on'); }
+function closeMenu(){ $('menuWrap').classList.remove('on'); }
+function goHome(){
+  const t = cur(); if(!t) return;
+  t.url = null; t.title = ''; t._confirmed = false; t.pendingHtml = null;
+  try{ t.frame.src = 'about:blank'; }catch(e){}
+  $('blocked').classList.remove('on'); $('reader').classList.remove('on');
+  hideLoading(); setActive(t.id); closeMenu();
+}
+function clearHistory(){
+  closeMenu();
+  const b = $('burn'); b.classList.add('on');
+  setTimeout(()=>{
+    history = []; save(); renderStart();
+    b.classList.remove('on');
+    showErr('History burned to ashes. 🔥');
+  }, 1900);
+}
+function toggleDesktop(){
+  if(!(window.SurfNative && SurfNative.setDesktop)){
+    showErr('Desktop site needs the Surf app.');
+    return;
+  }
+  prefs.desktop = !prefs.desktop;
+  try{ SurfNative.setDesktop(prefs.desktop); }catch(e){}
+  applyPrefs();
+}
   /* bookmarks sheet */
   #bmSheet{position:absolute;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-radius:16px 16px 0 0;
     max-height:70%;display:none;flex-direction:column;box-shadow:0 -8px 30px rgba(0,0,0,.25);}
@@ -152,6 +199,47 @@
   @keyframes spin{to{transform:rotate(360deg);}}
   #loading p{color:var(--mut);font-size:14px;margin:0;}
   #blocked.loading .btn{display:none;}
+  /* iPhone-style action menu */
+  #menuWrap{position:absolute;inset:0;z-index:40;pointer-events:none;}
+  #menuWrap.on{pointer-events:auto;}
+  #menuBg{position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;transition:opacity .25s;}
+  #menuWrap.on #menuBg{opacity:1;}
+  #menu{position:absolute;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));
+    background:rgba(249,249,249,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border-radius:14px;overflow:hidden;transform:translateY(120%);transition:transform .28s cubic-bezier(.32,.72,.35,1);}
+  #menuWrap.on #menu{transform:translateY(0);}
+  .mrow{display:flex;align-items:center;gap:12px;padding:13px 16px;font-size:16px;color:var(--acc);
+    cursor:pointer;background:transparent;border:none;width:100%;text-align:left;}
+  .mrow:active{background:rgba(0,0,0,.06);}
+  .mrow .bt{flex:1;}
+  .mrow .bt b{display:block;font-size:16px;font-weight:400;color:var(--txt);}
+  .mrow .bt small{font-size:12px;color:var(--mut);}
+  .mrow span:first-child{width:26px;text-align:center;}
+  .msep{height:8px;background:rgba(0,0,0,.04);}
+  .mrow.danger{color:#ff3b30;justify-content:center;}
+  .mrow.danger span:first-child{width:auto;}
+  .mrow.cancel{justify-content:center;color:var(--acc);}
+  /* fire-burn overlay */
+  #burn{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:18px;background:rgba(20,8,2,.92);}
+  #burn.on{display:flex;}
+  #burn .flames{display:flex;gap:6px;font-size:52px;}
+  #burn .flames span{display:inline-block;animation:flick .5s ease-in-out infinite alternate, rise 1.8s ease-in infinite;}
+  #burn .flames span:nth-child(2){animation-delay:.12s,.2s;font-size:64px;}
+  #burn .flames span:nth-child(3){animation-delay:.24s,.5s;}
+  #burn .flames span:nth-child(4){animation-delay:.06s,.9s;font-size:60px;}
+  #burn .flames span:nth-child(5){animation-delay:.3s,.4s;}
+  #burn .flames span:nth-child(6){animation-delay:.18s,1.1s;font-size:56px;}
+  @keyframes flick{from{transform:scale(1) rotate(-6deg);}to{transform:scale(1.18) rotate(6deg);}}
+  @keyframes rise{from{transform:translateY(24px);opacity:0;}30%{opacity:1;}to{transform:translateY(-46px);opacity:0;}}
+  #burn p{color:#ffb340;font-size:16px;margin:0;}
+  body.saver #burn .flames span{animation:flick .5s ease-in-out infinite alternate;}
+  /* popular sites on homepage */
+  .popgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:2px 16px 0;}
+  .pop{background:var(--card);border-radius:14px;padding:12px 4px 9px;display:flex;flex-direction:column;
+    align-items:center;gap:7px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  .pop img{width:38px;height:38px;border-radius:9px;}
+  .pop small{font-size:11px;color:var(--txt);}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -159,8 +247,11 @@
 <div id="phone">
   <div id="stage">
     <div id="start">
-      <h1>Favorites</h1>
+      <h1>Surf</h1>
       <p class="sub">Your shortcuts, on this device only.</p>
+      <div class="sechead">Popular</div>
+      <div class="popgrid" id="popGrid"></div>
+      <div class="sechead">Favorites</div>
       <div class="favgrid" id="favGrid"></div>
       <div class="sechead">History</div>
       <div id="histList"></div>
@@ -190,7 +281,7 @@
     <button class="tbtn" id="fwdBtn">›</button>
     <div id="addrWrap"><div id="addrPill"><span class="lock">🔒</span><span id="addrText"><span class="dom">New Tab</span></span></div></div>
     <button class="tbtn" id="shareBtn">⤴</button>
-    <button class="tbtn" id="bmBtn">📖</button>
+    <button class="tbtn" id="menuBtn">⋯</button>
     <button class="tbtn" id="tabsBtn">☐<span id="tabCount">1</span></button>
   </div>
 
@@ -211,13 +302,28 @@
   <div id="scrim"></div>
   <div id="bmSheet">
     <div class="bh"><span>Bookmarks</span><button class="tbtn" id="bmClose" style="font-size:16px;">Done</button></div>
-    <div class="sechead" style="margin:2px 16px 2px;">Settings</div>
-    <div class="bmrow" id="saverRow"><span>🔋</span><div class="bt"><b>Battery Saver</b><small>Less animation &amp; blur, easier on battery</small></div><span class="switch" id="saverSw"></span></div>
-    <div class="bmrow" id="textRow"><span>📝</span><div class="bt"><b>Text-only Reader</b><small>No images in reader view — saves data</small></div><span class="switch" id="textSw"></span></div>
-    <div class="bmrow" id="proxyRow"><span>🚀</span><div class="bt"><b>Auto lite-load</b><small>Load blocked sites through the lite proxy</small></div><span class="switch" id="proxySw"></span></div>
-    <div class="bmrow" id="clearRow"><span>🗑</span><div class="bt"><b>Clear history and website data</b><small>Make every visited site vanish</small></div></div>
-    <div class="sechead" style="margin:14px 16px 2px;">Saved</div>
     <div id="bmList"></div>
+  </div>
+  <!-- iPhone-style action menu -->
+  <div id="menuWrap">
+    <div id="menuBg"></div>
+    <div id="menu">
+      <div class="mrow" id="mHome"><span>🏠</span>Home</div>
+      <div class="mrow" id="mBm"><span>📖</span>Bookmarks</div>
+      <div class="msep"></div>
+      <div class="mrow" id="mDesk"><span>🖥</span><div class="bt"><b>Desktop site</b><small>App only</small></div><span class="switch" id="deskSw"></span></div>
+      <div class="mrow" id="mSaver"><span>🔋</span><div class="bt"><b>Battery Saver</b><small>Less animation &amp; blur</small></div><span class="switch" id="saverSw"></span></div>
+      <div class="mrow" id="mText"><span>📝</span><div class="bt"><b>Text-only Reader</b><small>No images, saves data</small></div><span class="switch" id="textSw"></span></div>
+      <div class="mrow" id="mProxy"><span>🚀</span><div class="bt"><b>Auto lite-load</b><small>Load blocked sites via proxy</small></div><span class="switch" id="proxySw"></span></div>
+      <div class="msep"></div>
+      <div class="mrow danger" id="mClear"><span>🔥</span>Clear history and website data</div>
+      <div class="mrow cancel" id="mCancel"><b>Cancel</b></div>
+    </div>
+  </div>
+  <!-- fire-burn overlay for clearing history -->
+  <div id="burn">
+    <div class="flames"><span>🔥</span><span>🔥</span><span>🔥</span><span>🔥</span><span>🔥</span><span>🔥</span></div>
+    <p>Burning everything…</p>
   </div>
 
   <div id="err"></div>
@@ -255,14 +361,15 @@ try{
   } else favorites = DEFAULT_FAVS.slice();
 }catch(e){ favorites = DEFAULT_FAVS.slice(); }
 function save(){ try{ localStorage.setItem(LS, JSON.stringify({history:history.slice(0,100), bookmarks, favorites})); }catch(e){} }
-/* prefs: battery saver + text-only reader + auto lite-load */
-let prefs = {saver:false, textOnly:false, proxy:true};
+/* prefs: battery saver + text-only reader + auto lite-load + desktop */
+let prefs = {saver:false, textOnly:false, proxy:true, desktop:false};
 try{ const p = JSON.parse(localStorage.getItem('surf-prefs')); if(p) prefs = Object.assign(prefs, p); }catch(e){}
 function applyPrefs(){
   document.body.classList.toggle('saver', !!prefs.saver);
   $('saverSw').classList.toggle('on', !!prefs.saver);
   $('textSw').classList.toggle('on', !!prefs.textOnly);
   $('proxySw').classList.toggle('on', prefs.proxy!==false);
+  $('deskSw').classList.toggle('on', !!prefs.desktop);
   try{ localStorage.setItem('surf-prefs', JSON.stringify(prefs)); }catch(e){}
 }
 window.__surfSaver = v => { prefs.saver = !!v; applyPrefs(); };
@@ -617,7 +724,7 @@ $('shareBtn').addEventListener('click', async ()=>{
   if(navigator.share){ try{ await navigator.share(data); }catch(e){} }
   else if(navigator.clipboard){ await navigator.clipboard.writeText(t.url); showErr('Link copied.'); }
 });
-$('bmBtn').addEventListener('click', ()=>{ renderBm(); $('bmSheet').classList.add('on'); $('scrim').classList.add('on'); });
+$('menuBtn').addEventListener('click', openMenu);
 $('bmClose').addEventListener('click', closeBm);
 $('scrim').addEventListener('click', closeBm);
 function closeBm(){ $('bmSheet').classList.remove('on'); $('scrim').classList.remove('on'); }
@@ -666,14 +773,20 @@ function renderTabsView(){
 }
 
 /* ---------- boot ---------- */
-$('saverRow').addEventListener('click', ()=>{ prefs.saver=!prefs.saver; applyPrefs(); });
-$('textRow').addEventListener('click', ()=>{ prefs.textOnly=!prefs.textOnly; applyPrefs(); });
-$('proxyRow').addEventListener('click', ()=>{ prefs.proxy=prefs.proxy===false?true:false; applyPrefs(); });
-$('clearRow').addEventListener('click', ()=>{
-  history=[]; save(); renderStart();
-  showErr('History and website data cleared.');
-});
+$('menuBg').addEventListener('click', closeMenu);
+$('mCancel').addEventListener('click', closeMenu);
+$('mHome').addEventListener('click', goHome);
+$('mBm').addEventListener('click', ()=>{ closeMenu(); renderBm(); $('bmSheet').classList.add('on'); $('scrim').classList.add('on'); });
+$('mSaver').addEventListener('click', ()=>{ prefs.saver=!prefs.saver; applyPrefs(); });
+$('mText').addEventListener('click', ()=>{ prefs.textOnly=!prefs.textOnly; applyPrefs(); });
+$('mProxy').addEventListener('click', ()=>{ prefs.proxy=prefs.proxy===false?true:false; applyPrefs(); });
+$('mDesk').addEventListener('click', toggleDesktop);
+$('mClear').addEventListener('click', clearHistory);
 applyPrefs();
+if(prefs.desktop && window.SurfNative && SurfNative.setDesktop){
+  try{ SurfNative.setDesktop(true); }catch(e){}
+}
+renderPopular();
 newTab();
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
