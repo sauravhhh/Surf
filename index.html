@@ -8,18 +8,13 @@
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f2f7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root{
     --bg:#f2f2f7; --card:#ffffff; --txt:#000; --mut:#8e8e93; --acc:#007aff;
     --bar:rgba(249,249,249,.88); --sep:#c6c6c8; --inp:#e9e9ee;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{ --bg:#000; --card:#1c1c1e; --txt:#fff; --mut:#98989f;
-      --bar:rgba(28,28,30,.88); --sep:#38383a; --inp:#2c2c2e; }
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;height:100%;}
@@ -148,6 +143,15 @@
     box-shadow:0 1px 3px rgba(0,0,0,.3);}
   .switch.on{background:var(--acc);}
   .switch.on::after{left:21px;}
+  /* loading overlay */
+  #loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:var(--bg);z-index:4;flex-direction:column;gap:14px;}
+  #loading.on{display:flex;}
+  #loading .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--sep);
+    border-top-color:var(--acc);animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #loading p{color:var(--mut);font-size:14px;margin:0;}
+  #blocked.loading .btn{display:none;}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -178,6 +182,7 @@
         <button class="btn ghost" id="openExtBtn">Open in system browser</button>
       </div>
     </div>
+    <div id="loading"><div class="spin"></div><p>Loading…</p></div>
   </div>
 
   <div id="tabbar">
@@ -209,6 +214,8 @@
     <div class="sechead" style="margin:2px 16px 2px;">Settings</div>
     <div class="bmrow" id="saverRow"><span>🔋</span><div class="bt"><b>Battery Saver</b><small>Less animation &amp; blur, easier on battery</small></div><span class="switch" id="saverSw"></span></div>
     <div class="bmrow" id="textRow"><span>📝</span><div class="bt"><b>Text-only Reader</b><small>No images in reader view — saves data</small></div><span class="switch" id="textSw"></span></div>
+    <div class="bmrow" id="proxyRow"><span>🚀</span><div class="bt"><b>Auto lite-load</b><small>Load blocked sites through the lite proxy</small></div><span class="switch" id="proxySw"></span></div>
+    <div class="bmrow" id="clearRow"><span>🗑</span><div class="bt"><b>Clear history and website data</b><small>Make every visited site vanish</small></div></div>
     <div class="sechead" style="margin:14px 16px 2px;">Saved</div>
     <div id="bmList"></div>
   </div>
@@ -228,25 +235,42 @@ let tabs = [];           // {id,url,title,blocked}
 let activeId = null;
 let history = [];        // {url,title,ts}
 let bookmarks = [];      // {url,title}
-let favorites = [        // defaults
+const DEFAULT_FAVS = [
   {url:'https://en.wikipedia.org', title:'Wikipedia'},
+  {url:'https://news.ycombinator.com', title:'Hacker News'},
   {url:'https://www.bbc.com/news', title:'BBC News'},
+  {url:'https://developer.mozilla.org', title:'MDN Docs'},
+  {url:'https://stackoverflow.com', title:'Stack Overflow'},
+  {url:'https://duckduckgo.com', title:'DuckDuckGo'},
+  {url:'https://github.com', title:'GitHub'},
+  {url:'https://www.openstreetmap.org', title:'OpenStreetMap'},
 ];
+let favorites = [];
 try{
   const s = JSON.parse(localStorage.getItem(LS));
-  if(s){ history=s.history||[]; bookmarks=s.bookmarks||[]; if(s.favorites) favorites=s.favorites; }
-}catch(e){}
+  if(s){
+    history=s.history||[]; bookmarks=s.bookmarks||[];
+    favorites=(s.favorites||[]).slice();
+    DEFAULT_FAVS.forEach(d=>{ if(!favorites.some(f=>f.url===d.url)) favorites.push(d); });
+  } else favorites = DEFAULT_FAVS.slice();
+}catch(e){ favorites = DEFAULT_FAVS.slice(); }
 function save(){ try{ localStorage.setItem(LS, JSON.stringify({history:history.slice(0,100), bookmarks, favorites})); }catch(e){} }
-/* prefs: battery saver + text-only reader */
-let prefs = {saver:false, textOnly:false};
+/* prefs: battery saver + text-only reader + auto lite-load */
+let prefs = {saver:false, textOnly:false, proxy:true};
 try{ const p = JSON.parse(localStorage.getItem('surf-prefs')); if(p) prefs = Object.assign(prefs, p); }catch(e){}
 function applyPrefs(){
   document.body.classList.toggle('saver', !!prefs.saver);
   $('saverSw').classList.toggle('on', !!prefs.saver);
   $('textSw').classList.toggle('on', !!prefs.textOnly);
+  $('proxySw').classList.toggle('on', prefs.proxy!==false);
   try{ localStorage.setItem('surf-prefs', JSON.stringify(prefs)); }catch(e){}
 }
 window.__surfSaver = v => { prefs.saver = !!v; applyPrefs(); };
+/* called by the native APK when the page errors (e.g. blocked response) */
+window.__surfNativeError = ()=>{
+  const t = cur();
+  if(t && t.url && !t._confirmed){ clearTimeout(t._bt); t._bt=null; t.blocked=true; showBlocked(t); }
+};
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function showErr(m){ const e=$('err'); e.textContent=m; e.style.display='block';
   clearTimeout(showErr.t); showErr.t=setTimeout(()=>e.style.display='none',3500); }
@@ -286,6 +310,7 @@ function setActive(id){
   $('start').classList.toggle('on', showStart);
   $('reader').classList.remove('on');
   $('blocked').classList.remove('on');
+  if(!t || !t.url || t._confirmed) hideLoading();
   updateAddr(t); updateTabUI(); renderStart();
 }
 function closeTab(id){
@@ -309,14 +334,31 @@ function updateAddr(t){
   } else $('addrText').innerHTML = '<span class="dom">New Tab</span>';
 }
 function navigate(t, url){
-  t.url = url; t.blocked = false; t.title = domainOf(url);
-  $('blocked').classList.remove('on'); $('reader').classList.remove('on');
+  t.url = url; t.blocked = false; t._confirmed = false; t.proxied = false; t.pendingHtml = null;
+  t.title = domainOf(url);
+  $('blocked').classList.remove('on'); $('blocked').classList.remove('loading');
+  $('reader').classList.remove('on');
   setActive(t.id);
+  showLoading();
   t.frame.src = url;
   updateAddr(t);
   clearTimeout(t._bt); t._bt = setTimeout(()=>checkBlocked(t), 3500);
 }
+function showLoading(){ $('loading').classList.add('on'); }
+function hideLoading(){ $('loading').classList.remove('on'); }
 function onFrameLoad(t){
+  if(t.pendingHtml){
+    try{
+      const doc = t.frame.contentDocument;
+      doc.open(); doc.write(t.pendingHtml); doc.close();
+    }catch(e){}
+    t.pendingHtml = null; t._confirmed = true; t.blocked = false; t.proxied = true;
+    $('blocked').classList.remove('on'); $('blocked').classList.remove('loading');
+    hideLoading();
+    try{ const d2 = t.frame.contentDocument; if(d2 && d2.title) t.title = d2.title; }catch(e){}
+    pushHistory(t.url, t.title); updateAddr(t);
+    return;
+  }
   if(t.id!==activeId) return;
   clearTimeout(t._bt); t._bt = setTimeout(()=>checkBlocked(t), 1200);
   try{
@@ -348,12 +390,45 @@ function checkBlocked(t){
       }catch(e){ still = true; }
       if(still){ t.blocked = true; t._confirmed = true; showBlocked(t); }
     }, 2000);
-  } else { t._confirmed = true; }
+  } else { t._confirmed = true; hideLoading(); }
+}
+/* rewrite fetched HTML so it renders standalone: base URLs fixed, CSP/frame-busters stripped */
+function rewriteHtml(html, base){
+  html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi, '');
+  const baseTag = '<base href="'+base+'">';
+  if(/<head[^>]*>/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1>'+baseTag);
+  else html = baseTag + html;
+  html = html.replace(/top\.location|parent\.location/gi, 'void 0');
+  return html;
+}
+/* lite proxy: fetch the page server-side-side and render it ourselves */
+async function proxyLoad(t){
+  clearTimeout(t._bt); t._bt = null;
+  const blk = $('blocked');
+  blk.classList.add('on'); blk.classList.add('loading');
+  blk.dataset.tid = t.id;
+  $('blockedMsg').textContent = 'Loading lite version of '+domainOf(t.url)+'…';
+  hideLoading();
+  try{
+    const r = await fetch(PROXY + encodeURIComponent(t.url));
+    if(!r.ok) throw 0;
+    const html = await r.text();
+    if(!html || html.length < 200) throw 0;
+    t.pendingHtml = rewriteHtml(html, t.url);
+    t.frame.src = 'about:blank'; // onFrameLoad writes pendingHtml
+  }catch(e){
+    blk.classList.remove('loading');
+    $('blockedMsg').textContent = domainOf(t.url)+" couldn't be loaded, even lite. Try the reader view or your system browser.";
+  }
 }
 function showBlocked(t){
-  $('blockedMsg').textContent = domainOf(t.url)+' doesn\'t allow itself to be shown inside other apps.';
-  $('blocked').classList.add('on');
-  $('blocked').dataset.tid = t.id;
+  if(prefs.proxy !== false){ proxyLoad(t); return; }
+  const blk = $('blocked');
+  blk.classList.remove('loading');
+  $('blockedMsg').textContent = domainOf(t.url)+" doesn't allow itself to be shown inside other apps.";
+  blk.classList.add('on');
+  blk.dataset.tid = t.id;
+  hideLoading();
 }
 $('readerBtn').addEventListener('click', ()=>{
   const t = tabs.find(x=>x.id===$('blocked').dataset.tid) || cur();
@@ -593,6 +668,11 @@ function renderTabsView(){
 /* ---------- boot ---------- */
 $('saverRow').addEventListener('click', ()=>{ prefs.saver=!prefs.saver; applyPrefs(); });
 $('textRow').addEventListener('click', ()=>{ prefs.textOnly=!prefs.textOnly; applyPrefs(); });
+$('proxyRow').addEventListener('click', ()=>{ prefs.proxy=prefs.proxy===false?true:false; applyPrefs(); });
+$('clearRow').addEventListener('click', ()=>{
+  history=[]; save(); renderStart();
+  showErr('History and website data cleared.');
+});
 applyPrefs();
 newTab();
 if('serviceWorker' in navigator){
