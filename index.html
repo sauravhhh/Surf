@@ -135,7 +135,15 @@ function renderPopular(){
   });
 }
 /* ---------- iPhone-style menu ---------- */
-function openMenu(){ $('menuWrap').classList.add('on'); }
+function openMenu(){
+  $('menuWrap').classList.add('on');
+  try{
+    if(window.SurfNative && SurfNative.getBlockedAds){
+      const n = SurfNative.getBlockedAds();
+      $('adCount').textContent = n + ' ad' + (n===1?'':'s') + ' blocked';
+    }
+  }catch(e){}
+}
 function closeMenu(){ $('menuWrap').classList.remove('on'); }
 function goHome(){
   const t = cur(); if(!t) return;
@@ -315,6 +323,7 @@ function toggleDesktop(){
       <div class="mrow" id="mSaver"><span>🔋</span><div class="bt"><b>Battery Saver</b><small>Less animation &amp; blur</small></div><span class="switch" id="saverSw"></span></div>
       <div class="mrow" id="mText"><span>📝</span><div class="bt"><b>Text-only Reader</b><small>No images, saves data</small></div><span class="switch" id="textSw"></span></div>
       <div class="mrow" id="mProxy"><span>🚀</span><div class="bt"><b>Auto lite-load</b><small>Load blocked sites via proxy</small></div><span class="switch" id="proxySw"></span></div>
+      <div class="mrow" id="mAd"><span>🛡</span><div class="bt"><b>Ad blocker</b><small id="adCount">App only</small></div><span class="switch" id="adSw"></span></div>
       <div class="msep"></div>
       <div class="mrow danger" id="mClear"><span>🔥</span>Clear history and website data</div>
       <div class="mrow cancel" id="mCancel"><b>Cancel</b></div>
@@ -361,8 +370,8 @@ try{
   } else favorites = DEFAULT_FAVS.slice();
 }catch(e){ favorites = DEFAULT_FAVS.slice(); }
 function save(){ try{ localStorage.setItem(LS, JSON.stringify({history:history.slice(0,100), bookmarks, favorites})); }catch(e){} }
-/* prefs: battery saver + text-only reader + auto lite-load + desktop */
-let prefs = {saver:false, textOnly:false, proxy:true, desktop:false};
+/* prefs: battery saver + text-only reader + auto lite-load + desktop + adblock */
+let prefs = {saver:false, textOnly:false, proxy:true, desktop:false, adBlock:true};
 try{ const p = JSON.parse(localStorage.getItem('surf-prefs')); if(p) prefs = Object.assign(prefs, p); }catch(e){}
 function applyPrefs(){
   document.body.classList.toggle('saver', !!prefs.saver);
@@ -370,6 +379,7 @@ function applyPrefs(){
   $('textSw').classList.toggle('on', !!prefs.textOnly);
   $('proxySw').classList.toggle('on', prefs.proxy!==false);
   $('deskSw').classList.toggle('on', !!prefs.desktop);
+  $('adSw').classList.toggle('on', prefs.adBlock!==false);
   try{ localStorage.setItem('surf-prefs', JSON.stringify(prefs)); }catch(e){}
 }
 window.__surfSaver = v => { prefs.saver = !!v; applyPrefs(); };
@@ -781,10 +791,18 @@ $('mSaver').addEventListener('click', ()=>{ prefs.saver=!prefs.saver; applyPrefs
 $('mText').addEventListener('click', ()=>{ prefs.textOnly=!prefs.textOnly; applyPrefs(); });
 $('mProxy').addEventListener('click', ()=>{ prefs.proxy=prefs.proxy===false?true:false; applyPrefs(); });
 $('mDesk').addEventListener('click', toggleDesktop);
+$('mAd').addEventListener('click', ()=>{
+  prefs.adBlock = prefs.adBlock===false ? true : false;
+  if(window.SurfNative && SurfNative.setAdBlock){ try{ SurfNative.setAdBlock(prefs.adBlock); }catch(e){} }
+  applyPrefs();
+});
 $('mClear').addEventListener('click', clearHistory);
 applyPrefs();
 if(prefs.desktop && window.SurfNative && SurfNative.setDesktop){
   try{ SurfNative.setDesktop(true); }catch(e){}
+}
+if(window.SurfNative && SurfNative.setAdBlock){
+  try{ SurfNative.setAdBlock(prefs.adBlock!==false); }catch(e){}
 }
 renderPopular();
 newTab();
